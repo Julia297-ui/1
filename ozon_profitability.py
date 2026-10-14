@@ -103,15 +103,32 @@ def model_of(article):
 # ---------- себестоимость ----------
 
 def load_costs(path):
-    df = pd.read_excel(path, sheet_name="Лист_1", header=1)
-    name_col = find_col(df, "номенклатура")
-    price_col = find_col(df, "вид цены")
+    """Себестоимость: ключи «art:<артикул>» (точное совпадение) и «<модель>».
+
+    Понимает два формата: «Цены_ВБ_себесы.xlsx» (лист «Лист_1», модель в скобках
+    в «Номенклатуре», цена в «ВИД ЦЕНЫ (СТОП-ЦЕНА)») и прайс Ozon (колонки
+    «Артикул» и «Себестоимость, руб» в шапке первой строки).
+    """
+    xl = pd.ExcelFile(path)
     prices = defaultdict(list)
-    for name, price in zip(df[name_col], to_num(df[price_col])):
-        m = re.findall(r"\(([^()]+)\)", str(name))
-        if m and price > 0:
-            prices[norm(m[-1])].append(float(price))
-    costs, conflicts = {}, []
+    costs = {}
+    if "Лист_1" in xl.sheet_names:
+        df = pd.read_excel(path, sheet_name="Лист_1", header=1)
+        name_col = find_col(df, "номенклатура")
+        price_col = find_col(df, "вид цены")
+        for name, price in zip(df[name_col], to_num(df[price_col])):
+            m = re.findall(r"\(([^()]+)\)", str(name))
+            if m and price > 0:
+                prices[norm(m[-1])].append(float(price))
+    else:
+        df = pd.read_excel(path, sheet_name=xl.sheet_names[0])
+        art_col = find_col(df, "артикул")
+        price_col = find_col(df, "себестоимость")
+        for art, price in zip(df[art_col], to_num(df[price_col])):
+            if pd.notna(art) and price > 0:
+                costs["art:" + norm(art)] = float(price)
+                prices[norm(model_of(art))].append(float(price))
+    conflicts = []
     for key, vals in prices.items():
         costs[key] = max(set(vals), key=vals.count)
         if len(set(vals)) > 1:
@@ -187,7 +204,8 @@ def compute(df, costs, tax):
     sku["sold"] = sold.reindex(sku.index).fillna(0)
     sku["returned"] = returned.reindex(sku.index).fillna(0)
     sku["model"] = [model_of(a) for a in sku.index]
-    sku["price"] = [costs.get(norm(m)) for m in sku["model"]]
+    sku["price"] = [costs.get("art:" + norm(a), costs.get(norm(m)))
+                    for a, m in zip(sku.index, sku["model"])]
     missing = sku[sku["price"].isna() & ((sku["sold"] > 0) | (sku["returned"] > 0))]
     sku["cost"] = (sku["sold"] - sku["returned"]) * sku["price"].fillna(0)
     sku["revenue"] = sku["sales"] + sku["returns"]
@@ -370,8 +388,11 @@ SKU_HEAD = ["Наименование", "Продано шт", "Продажа �
 def write_models(ws, res, tax_ref):
     sku = res["sku"]
     g = sku.groupby("model")
-    models = g[ITEMS + ["sold", "returned"]].sum()
-    models["price"] = g["price"].first()
+    models = g[ITEMS + ["sold", "returned", "cost"]].sum()
+    # средневзвешенная стоп-цена: у размеров одной модели цены могут различаться
+    units = models["sold"] - models["returned"]
+    models["price"] = (models["cost"] / units).where(units != 0, g["price"].first())
+    models.loc[g["price"].apply(lambda s: s.isna().all()), "price"] = None
     models = models.sort_index(key=lambda s: s.map(norm))
 
     put(ws, "A1", "Маржа на артикул (модель, все размеры вместе)", FH)
