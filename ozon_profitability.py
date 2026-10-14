@@ -530,8 +530,8 @@ def make_comments(res, prev):
                    f"себестоимость {pct(r['cost'])}, возвраты {pct(r['ret'])}.")
     out.append(f"SKU в минусе: {res['sku_minus']} из {len(res['sku'])}, убыток по ним {rub(res['loss'])}.")
     if res["margin"]:
-        out.append(f"Проценты по кредиту {rub(-res['totals']['interest'])} — "
-                   f"{pct(-res['totals']['interest'] / res['margin'], 0)} маржи; без них маржа "
+        out.append(f"Проценты по кредиту {rub(-res['totals']['interest'])} "
+                   f"({pct(-res['totals']['interest'] / res['revenue'])} выручки); без них маржа "
                    f"{rub(res['margin_nc'])}.")
     # здравый смысл (раздел 7 инструкции)
     bounds = [("комиссия", "comm", .45, .55), ("логистика", "log", .08, .18),
