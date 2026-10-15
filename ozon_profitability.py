@@ -529,7 +529,7 @@ def make_comments(res, prev):
         out.append(f"Комиссия {pct(r['comm'])}, логистика {pct(r['log'])}, ДРР {pct(r['drr'])}, "
                    f"себестоимость {pct(r['cost'])}, возвраты {pct(r['ret'])}.")
     out.append(f"SKU в минусе: {res['sku_minus']} из {len(res['sku'])}, убыток по ним {rub(res['loss'])}.")
-    if res["margin"]:
+    if res["totals"]["interest"]:
         out.append(f"Проценты по кредиту {rub(-res['totals']['interest'])} "
                    f"({pct(-res['totals']['interest'] / res['revenue'])} выручки); без них маржа "
                    f"{rub(res['margin_nc'])}.")
