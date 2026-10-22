@@ -27,17 +27,28 @@ def heart(d, cx, cy, s, w=7):
     d.line([(cx - s*.93, cy + .05*s), (cx, cy + s), (cx + s*.93, cy + .05*s)], fill=LN, width=w, joint="curve")
 def render(tag, name):
     c = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(c)
-    onesie(d, 70, 730, 210, 7); sock(d, 1380, 90, 170, 7); star(d, 360, 150, 46, 6); star(d, 1230, 830, 40, 6)
-    heart(d, 1470, 560, 50, 6); heart(d, 180, 140, 40, 6); star(d, 1160, 130, 28, 5); sock(d, 1380, 770, 90, 6)
-    star(d, 520, 880, 26, 5); heart(d, 1000, 900, 30, 5)
-    s = 230
+    if LAYOUT == "center":   # первый вариант: надпись по центру
+        onesie(d, 70, 730, 210, 7); sock(d, 1380, 90, 170, 7); star(d, 360, 150, 46, 6); star(d, 1230, 830, 40, 6)
+        heart(d, 1470, 560, 50, 6); heart(d, 180, 140, 40, 6); star(d, 1160, 130, 28, 5); sock(d, 1380, 770, 90, 6)
+        star(d, 520, 880, 26, 5); heart(d, 1000, 900, 30, 5)
+        ty, sy = 420, 600
+    else:                    # "top": текст в верхних ~40% — читается в свёрнутом рич на компьютере
+        star(d, 140, 110, 34, 5); heart(d, 1460, 120, 34, 5); star(d, 1500, 330, 22, 4); heart(d, 110, 340, 26, 4)
+        onesie(d, 110, 640, 230, 7); star(d, 470, 610, 40, 6); sock(d, 620, 720, 150, 7); heart(d, 860, 820, 44, 6)
+        star(d, 1010, 640, 30, 5); onesie(d, 1110, 700, 150, 6); sock(d, 1390, 600, 190, 7); star(d, 1300, 920, 26, 5)
+        heart(d, 380, 900, 30, 5)
+        ty, sy = 175, 395
+        d.line([(W / 2 - 230, 305), (W / 2 - 50, 305)], fill=LN, width=4); d.line([(W / 2 + 50, 305), (W / 2 + 230, 305)], fill=LN, width=4)
+        heart(d, W / 2, 297, 16, 4)
+    s = 230 if LAYOUT == "center" else 200
     while d.textlength("TOTEMFOX", font=f(500, s)) > 1180: s -= 4
-    d.text((W / 2, 420), "TOTEMFOX", font=f(500, s), fill=TXT, anchor="mm")
-    s2 = 76
+    d.text((W / 2, ty), "TOTEMFOX", font=f(500, s), fill=TXT, anchor="mm")
+    s2 = 76 if LAYOUT == "center" else 72
     while d.textlength(tag, font=f(400, s2)) > 1100: s2 -= 2
-    d.text((W / 2, 600), tag, font=f(400, s2), fill=TXT, anchor="mm")
+    d.text((W / 2, sy), tag, font=f(400, s2), fill=TXT, anchor="mm")
     c.resize((800, 500), Image.LANCZOS).save(os.path.join(OUT, name), quality=95, subsampling=0)
     print("saved", name)
+LAYOUT = os.environ.get("LAYOUT", "top")
 TAG = os.environ.get("TAG", "забота в каждой детали")
 for nm, (bg, tx, ln) in PAL.items():
     BG, TXT, LN = tuple(bg), tuple(tx), tuple(ln)
