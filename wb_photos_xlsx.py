@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Excel-файл «Артикул продавца — Фото» по всем карточкам Wildberries.
+"""Excel-файл «Артикул продавца — Артикул WB — Фото» по всем карточкам Wildberries.
 
-В столбец A пишется артикул продавца, в столбец B вставляются первые 3 фото карточки.
+В столбец A пишется артикул продавца, в B — артикул WB, в C вставляются первые 3 фото карточки.
 Токен берётся из переменной окружения WB_API_TOKEN (категория «Контент»).
 Запуск: python3 wb_photos_xlsx.py [файл.xlsx]
 """
@@ -9,6 +9,7 @@ import io
 import json
 import os
 import sys
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -40,13 +41,17 @@ def fetch_cards(token):
         cursor = {"limit": 100, "updatedAt": c["updatedAt"], "nmID": c["nmID"]}
 
 
-def download(url):
-    try:
-        with urllib.request.urlopen(url, timeout=60) as r:
-            img = Image.open(io.BytesIO(r.read())).convert("RGB")
-    except Exception as e:
-        print(f"Не удалось скачать {url}: {e}", file=sys.stderr)
-        return None
+def download(url, attempts=4):
+    for n in range(attempts):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                img = Image.open(io.BytesIO(r.read())).convert("RGB")
+            break
+        except Exception as e:
+            if n == attempts - 1:
+                print(f"Не удалось скачать {url}: {e}", file=sys.stderr)
+                return None
+            time.sleep(2 ** n)
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=85)
     return buf
@@ -66,18 +71,20 @@ def main():
     wb = Workbook()
     ws = wb.active
     ws.title = "Фото"
-    ws.append(["Артикул продавца", "Фото"])
+    ws.append(["Артикул продавца", "Артикул WB", "Фото"])
     for cell in ws[1]:
         cell.font = Font(name="Arial", bold=True)
     ws.column_dimensions["A"].width = 30
-    ws.column_dimensions["B"].width = (PHOTOS * (W + GAP) + GAP) / 7
+    ws.column_dimensions["B"].width = 15
+    ws.column_dimensions["C"].width = (PHOTOS * (W + GAP) + GAP) / 7
     ws.freeze_panes = "A2"
 
     it = iter(images)
     for i, (card, row_urls) in enumerate(zip(cards, urls), start=2):
-        cell = ws.cell(i, 1, card.get("vendorCode", ""))
-        cell.font = Font(name="Arial")
-        cell.alignment = Alignment(vertical="center")
+        for col, value in ((1, card.get("vendorCode", "")), (2, card.get("nmID"))):
+            cell = ws.cell(i, col, value)
+            cell.font = Font(name="Arial")
+            cell.alignment = Alignment(vertical="center", horizontal="left")
         ws.row_dimensions[i].height = (H + 2 * GAP) * 0.75
         for j in range(len(row_urls)):
             buf = next(it)
@@ -85,7 +92,7 @@ def main():
                 continue
             img = XLImage(buf)
             img.width, img.height = W, H
-            marker = AnchorMarker(col=1, colOff=pixels_to_EMU(GAP + j * (W + GAP)),
+            marker = AnchorMarker(col=2, colOff=pixels_to_EMU(GAP + j * (W + GAP)),
                                   row=i - 1, rowOff=pixels_to_EMU(GAP))
             img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(
                 pixels_to_EMU(W), pixels_to_EMU(H)))
