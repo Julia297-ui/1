@@ -11,6 +11,7 @@ Performance API (для списка товаров в рекламных кам
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -45,6 +46,10 @@ def request(url, body=None, headers=None, method=None):
                 time.sleep(2 ** attempt)
                 continue
             sys.exit(f"{url}: HTTP {e.code} {e.read().decode()[:300]}")
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if attempt == 4:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def seller(path, body, creds):
@@ -119,6 +124,15 @@ def fetch_perf_campaigns(perf_id, perf_secret):
     return campaigns, sku_campaigns
 
 
+def product_skus(p):
+    return {str(p["sku"])} | {str(s["sku"]) for s in p.get("sources", [])}
+
+
+def natural_key(s):
+    """Сортировка артикулов с учётом чисел: «Агни 42» раньше «Агни 100»."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
+
+
 def write_sheet(ws, header, rows, widths):
     ws.append(header)
     for row in rows:
@@ -155,11 +169,28 @@ def main():
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Товары"
+    ws.title = "Склейки — артикулы"
+    rows = []
+    for m, ps in sorted(models.items(), key=lambda kv: -len(kv[1])):
+        offers = sorted((p["offer_id"] for p in ps), key=natural_key)
+        if sku_campaigns is None:
+            ads = "нет данных (нужен доступ к Performance API)"
+        else:
+            advertised = sorted((p["offer_id"] for p in ps
+                                 if any(sku_campaigns.get(s) for s in product_skus(p))), key=natural_key)
+            ads = (f"Есть реклама ({len(advertised)} из {len(offers)}): " + ", ".join(advertised)
+                   if advertised else "НЕТ АКТИВНОЙ РЕКЛАМЫ")
+        rows.append([", ".join(offers), ads])
+    write_sheet(ws, ["Склейка — артикулы", "Реклама на товары склейки"], rows, [110, 60])
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    ws = wb.create_sheet("Товары")
     rows = []
     for m, ps in sorted(models.items(), key=lambda kv: -len(kv[1])):
         for p in sorted(ps, key=lambda p: p["offer_id"]):
-            skus = {str(p["sku"])} | {str(s["sku"]) for s in p.get("sources", [])}
+            skus = product_skus(p)
             stock = Counter()
             for s in p.get("stocks", {}).get("stocks", []):
                 stock[s["source"]] += s.get("present", 0) - s.get("reserved", 0)
